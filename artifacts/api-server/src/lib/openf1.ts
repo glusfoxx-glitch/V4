@@ -1,0 +1,255 @@
+type DriverInfo = {
+  number: number;
+  acronym: string;
+  fullName: string;
+  team: string;
+  teamColour: string;
+  headshotUrl: string;
+};
+
+type CacheEntry = { data: Map<string, DriverInfo>; expiresAt: number };
+let driverCache: CacheEntry | null = null;
+
+const ONE_MIN = 60 * 1000;
+const FIVE_MIN = 5 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
+
+async function loadDrivers(): Promise<Map<string, DriverInfo>> {
+  const now = Date.now();
+  if (driverCache && driverCache.expiresAt > now) return driverCache.data;
+
+  try {
+    const res = await fetch(
+      "https://api.openf1.org/v1/drivers?session_key=latest",
+      { headers: { "User-Agent": "F1Info/4.0" } },
+    );
+    if (!res.ok) throw new Error(`OpenF1 ${res.status}`);
+    const rows = (await res.json()) as Array<{
+      driver_number: number;
+      name_acronym: string;
+      full_name: string;
+      team_name: string;
+      team_colour: string;
+      headshot_url: string;
+    }>;
+
+    const map = new Map<string, DriverInfo>();
+    for (const r of rows) {
+      if (!r.driver_number || !r.name_acronym) continue;
+      const info: DriverInfo = {
+        number: r.driver_number,
+        acronym: r.name_acronym,
+        fullName: r.full_name,
+        team: r.team_name,
+        teamColour: r.team_colour,
+        headshotUrl: r.headshot_url,
+      };
+      map.set(r.name_acronym, info);
+      map.set(String(r.driver_number), info);
+    }
+    driverCache = { data: map, expiresAt: now + ONE_HOUR };
+    return map;
+  } catch (err) {
+    if (driverCache) return driverCache.data;
+    return new Map();
+  }
+}
+
+export async function driverPhoto(
+  acronym?: string,
+  number?: string,
+): Promise<string | undefined> {
+  if (!acronym && !number) return undefined;
+  const map = await loadDrivers();
+  const info =
+    (acronym ? map.get(acronym) : undefined) ??
+    (number ? map.get(number) : undefined);
+  return info?.headshotUrl;
+}
+
+export async function driverInfo(
+  acronym?: string,
+  number?: string,
+): Promise<DriverInfo | undefined> {
+  if (!acronym && !number) return undefined;
+  const map = await loadDrivers();
+  return (
+    (acronym ? map.get(acronym) : undefined) ??
+    (number ? map.get(number) : undefined)
+  );
+}
+
+type OpenF1Session = {
+  session_key: number;
+  session_name: string;
+  session_type: string;
+  meeting_key: number;
+  year: number;
+  date_start: string;
+  date_end: string;
+  circuit_short_name: string;
+  country_name: string;
+};
+
+type OpenF1Lap = {
+  driver_number: number;
+  lap_number: number;
+  lap_duration: number | null;
+  is_pit_out_lap: boolean;
+  date_start: string;
+};
+
+type OpenF1Driver = {
+  driver_number: number;
+  name_acronym: string;
+  full_name: string;
+  team_name: string;
+  team_colour: string;
+  headshot_url: string;
+};
+
+export type FPResult = {
+  position: number;
+  driver: string;
+  driverCode: string;
+  team: string;
+  time: string;
+  gap: string;
+  lapCount: number;
+};
+
+const sessionCache = new Map<string, { data: OpenF1Session[]; expiresAt: number }>();
+const fpResultCache = new Map<number, { data: FPResult[]; expiresAt: number }>();
+
+async function fetchOpenF1<T>(url: string, ttlMs: number, cacheKey: string, cacheMap: Map<string, { data: T; expiresAt: number }>): Promise<T> {
+  const now = Date.now();
+  const hit = cacheMap.get(cacheKey);
+  if (hit && hit.expiresAt > now) return hit.data;
+
+  const res = await fetch(url, {
+    headers: { "User-Agent": "F1Info/4.0" },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`OpenF1 ${res.status} on ${url}`);
+  const data = (await res.json()) as T;
+  cacheMap.set(cacheKey, { data, expiresAt: now + ttlMs });
+  return data;
+}
+
+async function getPracticeSessionKey(
+  sessionDate: string,
+  practiceNumber: 1 | 2 | 3,
+): Promise<number | null> {
+  const year = sessionDate.substring(0, 4);
+  const sessionName = `Practice ${practiceNumber}`;
+
+  try {
+    const sessions = await fetchOpenF1<OpenF1Session[]>(
+      `https://api.openf1.org/v1/sessions?year=${year}&session_type=Practice`,
+      ONE_HOUR,
+      `sessions-${year}-practice`,
+      sessionCache,
+    );
+
+    const targetDate = sessionDate.substring(0, 10);
+    const match = sessions.find(
+      (s) =>
+        s.session_name === sessionName &&
+        s.date_start.substring(0, 10) === targetDate,
+    );
+    return match?.session_key ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function formatLapTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds - mins * 60;
+  const secsStr = secs.toFixed(3).padStart(6, "0");
+  if (mins > 0) return `${mins}:${secsStr}`;
+  return secsStr;
+}
+
+export async function fetchFPResults(
+  sessionDate: string | undefined,
+  practiceNumber: 1 | 2 | 3,
+): Promise<FPResult[]> {
+  if (!sessionDate) return [];
+
+  const sessionKey = await getPracticeSessionKey(sessionDate, practiceNumber);
+  if (!sessionKey) return [];
+
+  const cacheHit = fpResultCache.get(sessionKey);
+  if (cacheHit && cacheHit.expiresAt > Date.now()) return cacheHit.data;
+
+  try {
+    const [laps, drivers] = await Promise.all([
+      fetch(`https://api.openf1.org/v1/laps?session_key=${sessionKey}`, {
+        headers: { "User-Agent": "F1Info/4.0" },
+        signal: AbortSignal.timeout(15000),
+      }).then((r) => {
+        if (!r.ok) throw new Error(`OpenF1 laps ${r.status}`);
+        return r.json() as Promise<OpenF1Lap[]>;
+      }),
+      fetch(`https://api.openf1.org/v1/drivers?session_key=${sessionKey}`, {
+        headers: { "User-Agent": "F1Info/4.0" },
+        signal: AbortSignal.timeout(10000),
+      }).then((r) => {
+        if (!r.ok) throw new Error(`OpenF1 drivers ${r.status}`);
+        return r.json() as Promise<OpenF1Driver[]>;
+      }),
+    ]);
+
+    const driverMap = new Map<number, OpenF1Driver>();
+    for (const d of drivers) {
+      driverMap.set(d.driver_number, d);
+    }
+
+    const bestLapByDriver = new Map<number, { time: number; lapCount: number }>();
+    for (const lap of laps) {
+      if (!lap.lap_duration || lap.is_pit_out_lap) continue;
+      const existing = bestLapByDriver.get(lap.driver_number);
+      if (!existing) {
+        bestLapByDriver.set(lap.driver_number, { time: lap.lap_duration, lapCount: 1 });
+      } else {
+        existing.lapCount++;
+        if (lap.lap_duration < existing.time) {
+          existing.time = lap.lap_duration;
+        }
+      }
+    }
+
+    const entries = Array.from(bestLapByDriver.entries())
+      .filter(([, v]) => v.time > 0)
+      .sort(([, a], [, b]) => a.time - b.time);
+
+    const leaderTime = entries[0]?.[1]?.time ?? null;
+
+    const results: FPResult[] = entries.map(([driverNumber, { time, lapCount }], i) => {
+      const d = driverMap.get(driverNumber);
+      const gap =
+        i === 0 || leaderTime === null
+          ? "—"
+          : `+${(time - leaderTime).toFixed(3)}`;
+      return {
+        position: i + 1,
+        driver: d?.full_name ?? `#${driverNumber}`,
+        driverCode: d?.name_acronym ?? String(driverNumber),
+        team: d?.team_name ?? "—",
+        time: formatLapTime(time),
+        gap,
+        lapCount,
+      };
+    });
+
+    const now = Date.now();
+    const sessionEndDate = new Date(sessionDate + "T23:59:59Z").getTime();
+    const ttl = now > sessionEndDate + ONE_HOUR ? ONE_HOUR : FIVE_MIN;
+    fpResultCache.set(sessionKey, { data: results, expiresAt: now + ttl });
+
+    return results;
+  } catch {
+    return [];
+  }
+}
