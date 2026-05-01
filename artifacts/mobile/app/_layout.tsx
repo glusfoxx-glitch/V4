@@ -19,6 +19,7 @@ import {
   getNotificationsEnabled,
   rescheduleAll,
 } from "@/lib/notifications";
+import { initAdMob, requestTrackingPermission } from "@/lib/admob";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -62,7 +63,16 @@ export default function RootLayout() {
           await rescheduleAll();
         }
       } catch {
-        // ignore — notifications are best-effort and unavailable on web
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await requestTrackingPermission();
+        await initAdMob();
+      } catch {
       }
     })();
   }, []);

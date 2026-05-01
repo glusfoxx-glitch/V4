@@ -26,7 +26,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-tracking-transparency",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7167269478147921~2977592716",
+          "iosAppId": "ca-app-pub-7167269478147921~2977592716",
+          "userTrackingUsageDescription": "Cette autorisation permet d'afficher des publicités personnalisées. Vos données ne sont pas vendues."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

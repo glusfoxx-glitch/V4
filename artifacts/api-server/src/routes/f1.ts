@@ -13,7 +13,7 @@ import {
   type JolpicaResultRow,
   type SessionSlot,
 } from "../lib/jolpica.js";
-import { driverPhoto, fetchFPResults } from "../lib/openf1.js";
+import { driverPhoto, fetchFPResults, fetchSprintQualiResults } from "../lib/openf1.js";
 
 const router = Router();
 
@@ -30,7 +30,7 @@ const SESSION_LABELS: Record<SessionType, string> = {
   fp1: "Essais Libres 1",
   fp2: "Essais Libres 2",
   fp3: "Essais Libres 3",
-  sprint_quali: "Sprint Shootout",
+  sprint_quali: "Qualification Sprint",
   qualifying: "Qualifications",
   sprint: "Sprint",
   race: "Course",
@@ -40,7 +40,7 @@ const RESULTS_AVAILABLE: Record<SessionType, boolean> = {
   fp1: true,
   fp2: true,
   fp3: true,
-  sprint_quali: false,
+  sprint_quali: true,
   qualifying: true,
   sprint: true,
   race: true,
@@ -251,6 +251,11 @@ router.get("/gps/:id/sessions/:type", async (req, res, next) => {
     } else if (type === "fp3") {
       const fpRes = await fetchFPResults(race.ThirdPractice?.date, 3);
       res.json({ ...base, results: fpRes });
+      return;
+    } else if (type === "sprint_quali") {
+      const sqDate = race.SprintQualifying?.date ?? race.SecondPractice?.date;
+      const sqRes = await fetchSprintQualiResults(sqDate);
+      res.json({ ...base, results: sqRes });
       return;
     }
 

@@ -91,6 +91,16 @@ type OpenF1Session = {
   country_name: string;
 };
 
+type OpenF1TimingRow = {
+  driver_number: number;
+  position: number;
+  lap_time: string | null;
+  lap_q1: string | null;
+  lap_q2: string | null;
+  lap_q3: string | null;
+  date: string;
+};
+
 type OpenF1Lap = {
   driver_number: number;
   lap_number: number;
@@ -120,6 +130,7 @@ export type FPResult = {
 
 const sessionCache = new Map<string, { data: OpenF1Session[]; expiresAt: number }>();
 const fpResultCache = new Map<number, { data: FPResult[]; expiresAt: number }>();
+const sqResultCache = new Map<number, { data: FPResult[]; expiresAt: number }>();
 
 async function fetchOpenF1<T>(url: string, ttlMs: number, cacheKey: string, cacheMap: Map<string, { data: T; expiresAt: number }>): Promise<T> {
   const now = Date.now();
@@ -156,6 +167,27 @@ async function getPracticeSessionKey(
       (s) =>
         s.session_name === sessionName &&
         s.date_start.substring(0, 10) === targetDate,
+    );
+    return match?.session_key ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getSprintQualiSessionKey(
+  sessionDate: string,
+): Promise<number | null> {
+  const year = sessionDate.substring(0, 4);
+  try {
+    const sessions = await fetchOpenF1<OpenF1Session[]>(
+      `https://api.openf1.org/v1/sessions?year=${year}&session_name=Sprint+Qualifying`,
+      ONE_HOUR,
+      `sessions-${year}-sprint-quali`,
+      sessionCache,
+    );
+    const targetDate = sessionDate.substring(0, 10);
+    const match = sessions.find(
+      (s) => s.date_start.substring(0, 10) === targetDate,
     );
     return match?.session_key ?? null;
   } catch {
@@ -247,6 +279,81 @@ export async function fetchFPResults(
     const sessionEndDate = new Date(sessionDate + "T23:59:59Z").getTime();
     const ttl = now > sessionEndDate + ONE_HOUR ? ONE_HOUR : FIVE_MIN;
     fpResultCache.set(sessionKey, { data: results, expiresAt: now + ttl });
+
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchSprintQualiResults(
+  sessionDate: string | undefined,
+): Promise<FPResult[]> {
+  if (!sessionDate) return [];
+
+  const sessionKey = await getSprintQualiSessionKey(sessionDate);
+  if (!sessionKey) return [];
+
+  const cacheHit = sqResultCache.get(sessionKey);
+  if (cacheHit && cacheHit.expiresAt > Date.now()) return cacheHit.data;
+
+  try {
+    const [laps, drivers] = await Promise.all([
+      fetch(`https://api.openf1.org/v1/laps?session_key=${sessionKey}`, {
+        headers: { "User-Agent": "F1Info/4.0" },
+        signal: AbortSignal.timeout(15000),
+      }).then((r) => {
+        if (!r.ok) throw new Error(`OpenF1 laps ${r.status}`);
+        return r.json() as Promise<OpenF1Lap[]>;
+      }),
+      fetch(`https://api.openf1.org/v1/drivers?session_key=${sessionKey}`, {
+        headers: { "User-Agent": "F1Info/4.0" },
+        signal: AbortSignal.timeout(10000),
+      }).then((r) => {
+        if (!r.ok) throw new Error(`OpenF1 drivers ${r.status}`);
+        return r.json() as Promise<OpenF1Driver[]>;
+      }),
+    ]);
+
+    const driverMap = new Map<number, OpenF1Driver>();
+    for (const d of drivers) driverMap.set(d.driver_number, d);
+
+    const bestLapByDriver = new Map<number, { time: number; lapCount: number }>();
+    for (const lap of laps) {
+      if (!lap.lap_duration || lap.is_pit_out_lap) continue;
+      const existing = bestLapByDriver.get(lap.driver_number);
+      if (!existing) {
+        bestLapByDriver.set(lap.driver_number, { time: lap.lap_duration, lapCount: 1 });
+      } else {
+        existing.lapCount++;
+        if (lap.lap_duration < existing.time) existing.time = lap.lap_duration;
+      }
+    }
+
+    const entries = Array.from(bestLapByDriver.entries())
+      .filter(([, v]) => v.time > 0)
+      .sort(([, a], [, b]) => a.time - b.time);
+
+    const leaderTime = entries[0]?.[1]?.time ?? null;
+
+    const results: FPResult[] = entries.map(([driverNumber, { time, lapCount }], i) => {
+      const d = driverMap.get(driverNumber);
+      const gap = i === 0 || leaderTime === null ? "—" : `+${(time - leaderTime).toFixed(3)}`;
+      return {
+        position: i + 1,
+        driver: d?.full_name ?? `#${driverNumber}`,
+        driverCode: d?.name_acronym ?? String(driverNumber),
+        team: d?.team_name ?? "—",
+        time: formatLapTime(time),
+        gap,
+        lapCount,
+      };
+    });
+
+    const now = Date.now();
+    const sessionEndDate = new Date(sessionDate + "T23:59:59Z").getTime();
+    const ttl = now > sessionEndDate + ONE_HOUR ? ONE_HOUR : FIVE_MIN;
+    sqResultCache.set(sessionKey, { data: results, expiresAt: now + ttl });
 
     return results;
   } catch {
