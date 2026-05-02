@@ -13,7 +13,7 @@ import {
   type JolpicaResultRow,
   type SessionSlot,
 } from "../lib/jolpica.js";
-import { driverPhoto, fetchFPResults, fetchQualifyingResultsOpenF1, fetchSprintQualiResults } from "../lib/openf1.js";
+import { driverPhoto, fetchFPResults, fetchQualifyingResultsOpenF1, fetchRaceResultsOpenF1, fetchSprintQualiResults } from "../lib/openf1.js";
 
 const router = Router();
 
@@ -270,13 +270,29 @@ router.get("/gps/:id/sessions/:type", async (req, res, next) => {
       return;
     }
 
-    let rows: JolpicaResultRow[] = [];
-    if (type === "race") rows = await fetchRaceResults(race.round);
-    else if (type === "sprint") rows = await fetchSprintResults(race.round);
+    if (type === "race") {
+      const openf1Results = await fetchRaceResultsOpenF1(race.date, "Race");
+      if (openf1Results.length >= 3) {
+        res.json({ ...base, results: openf1Results });
+        return;
+      }
+      const rows = await fetchRaceResults(race.round);
+      res.json({ ...base, results: mapRaceResults(rows) });
+      return;
+    }
 
-    results = mapRaceResults(rows);
+    if (type === "sprint") {
+      const openf1Results = await fetchRaceResultsOpenF1(race.Sprint?.date, "Sprint");
+      if (openf1Results.length >= 3) {
+        res.json({ ...base, results: openf1Results });
+        return;
+      }
+      const rows = await fetchSprintResults(race.round);
+      res.json({ ...base, results: mapRaceResults(rows) });
+      return;
+    }
 
-    res.json({ ...base, results });
+    res.json({ ...base, results: [] });
   } catch (err) {
     next(err);
   }
