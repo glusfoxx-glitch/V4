@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import { getLocalDriverPhoto } from "@/lib/driverPhotos";
 import {
   fetchConstructorStandings,
   fetchDriverStandings,
@@ -163,18 +164,22 @@ function DriverRow({ row }: { row: DriverStanding }) {
       <View style={[styles.teamBar, { backgroundColor: teamHex }]} />
 
       <View style={styles.photoCol}>
-        {row.photo ? (
-          <Image
-            source={{ uri: row.photo }}
-            style={styles.photo}
-            contentFit="cover"
-            transition={200}
-          />
-        ) : (
-          <View style={[styles.photoFallback, { backgroundColor: teamHex }]}>
-            <Text style={styles.photoFallbackText}>{row.driverCode}</Text>
-          </View>
-        )}
+        {(() => {
+          const local = getLocalDriverPhoto(row.driverCode);
+          const src = local ?? (row.photo ? { uri: row.photo } : null);
+          return src ? (
+            <Image
+              source={src}
+              style={styles.photo}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            <View style={[styles.photoFallback, { backgroundColor: teamHex }]}>
+              <Text style={styles.photoFallbackText}>{row.driverCode}</Text>
+            </View>
+          );
+        })()}
         {row.driverNumber != null ? (
           <View
             style={[styles.numberBadge, { backgroundColor: teamHex }]}

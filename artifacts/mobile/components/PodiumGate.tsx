@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useState } from "react";
 
-import { fetchLatestPodium } from "@/lib/f1";
+import { fetchLatestPodium, type DriverStandings } from "@/lib/f1";
 import { getLastSeenPodium, markPodiumSeen } from "@/lib/podiumSeen";
 
 import { PodiumCelebration } from "./PodiumCelebration";
@@ -9,6 +9,7 @@ import { PodiumCelebration } from "./PodiumCelebration";
 export function PodiumGate() {
   const [visible, setVisible] = useState(false);
   const [shown, setShown] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data } = useQuery({
     queryKey: ["f1", "podium-latest"],
@@ -16,6 +17,15 @@ export function PodiumGate() {
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
+
+  const photoFallbacks = useMemo(() => {
+    const standings = queryClient.getQueryData<DriverStandings>(["f1", "standings", "drivers"]);
+    const map: Record<string, string> = {};
+    for (const d of standings?.standings ?? []) {
+      if (d.driverCode && d.photo) map[d.driverCode] = d.photo;
+    }
+    return map;
+  }, [queryClient, visible]);
 
   useEffect(() => {
     if (!data || shown) return;
@@ -41,6 +51,7 @@ export function PodiumGate() {
     <PodiumCelebration
       data={data}
       visible={visible}
+      photoFallbacks={photoFallbacks}
       onClose={async () => {
         setVisible(false);
         await markPodiumSeen(data.key);

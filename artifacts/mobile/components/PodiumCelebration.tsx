@@ -29,6 +29,7 @@ import Animated, {
 
 import { useColors } from "@/hooks/useColors";
 import { teamColor, type PodiumLatest, type PodiumEntry } from "@/lib/f1";
+import { getLocalDriverPhoto } from "@/lib/driverPhotos";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -54,9 +55,10 @@ type Props = {
   data: PodiumLatest;
   visible: boolean;
   onClose: () => void;
+  photoFallbacks?: Record<string, string>;
 };
 
-export function PodiumCelebration({ data, visible, onClose }: Props) {
+export function PodiumCelebration({ data, visible, onClose, photoFallbacks }: Props) {
   const colors = useColors();
 
   useEffect(() => {
@@ -234,18 +236,22 @@ function PodiumStep({
   return (
     <View style={styles.stepCol}>
       <Animated.View style={[styles.photoWrap, photoStyle]}>
-        {entry.photo ? (
-          <Image
-            source={{ uri: entry.photo }}
-            style={styles.photo}
-            contentFit="cover"
-            transition={250}
-          />
-        ) : (
-          <View style={[styles.photoFallback, { backgroundColor: teamHex }]}>
-            <Text style={styles.photoFallbackText}>{entry.driverCode}</Text>
-          </View>
-        )}
+        {(() => {
+          const local = getLocalDriverPhoto(entry.driverCode);
+          const src = local ?? (entry.photo ? { uri: entry.photo } : null);
+          return src ? (
+            <Image
+              source={src}
+              style={styles.photo}
+              contentFit="cover"
+              transition={250}
+            />
+          ) : (
+            <View style={[styles.photoFallback, { backgroundColor: teamHex }]}>
+              <Text style={styles.photoFallbackText}>{entry.driverCode}</Text>
+            </View>
+          );
+        })()}
         <View style={[styles.medal, { borderColor: c1 }]}>
           <Text style={styles.medalText}>{POSITION_MEDALS[entry.position]}</Text>
         </View>
