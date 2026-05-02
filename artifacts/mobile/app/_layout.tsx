@@ -19,7 +19,6 @@ import {
   getNotificationsEnabled,
   rescheduleAll,
 } from "@/lib/notifications";
-import { initAdMob, requestTrackingPermission } from "@/lib/admob";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -62,16 +61,6 @@ export default function RootLayout() {
         if (await getNotificationsEnabled()) {
           await rescheduleAll();
         }
-      } catch {
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        await requestTrackingPermission();
-        await initAdMob();
       } catch {
       }
     })();

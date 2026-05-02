@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { fetchNews, formatRelativeTime, type NewsItem } from "@/lib/f1";
-import { AdCard } from "@/components/AdCard";
 
 export default function NewsScreen() {
   const colors = useColors();
@@ -52,25 +51,13 @@ export default function NewsScreen() {
     );
   }
 
-  const newsItems = data?.items ?? [];
-
-  type ListRow =
-    | { kind: "news"; item: NewsItem; newsIndex: number }
-    | { kind: "ad"; id: string };
-
-  const listData: ListRow[] = [];
-  newsItems.forEach((item, i) => {
-    listData.push({ kind: "news", item, newsIndex: i });
-    if ((i + 1) % 4 === 0 && i < newsItems.length - 1) {
-      listData.push({ kind: "ad", id: `ad-${i}` });
-    }
-  });
+  const items = data?.items ?? [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={listData}
-        keyExtractor={(row) => row.kind === "news" ? row.item.id : row.id}
+        data={items}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={{
           paddingTop: 16,
           paddingBottom: insets.bottom + 100,
@@ -93,7 +80,7 @@ export default function NewsScreen() {
               Actualités
             </Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              {newsItems.length} article{newsItems.length > 1 ? "s" : ""} · mise à jour automatique
+              {items.length} article{items.length > 1 ? "s" : ""} · mise à jour automatique
             </Text>
           </View>
         }
@@ -105,10 +92,9 @@ export default function NewsScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item: row }) => {
-          if (row.kind === "ad") return <AdCard />;
-          return <NewsCard item={row.item} featured={row.newsIndex === 0} />;
-        }}
+        renderItem={({ item, index }) => (
+          <NewsCard item={item} featured={index === 0} />
+        )}
       />
     </View>
   );

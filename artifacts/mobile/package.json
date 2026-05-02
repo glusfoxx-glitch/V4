@@ -55,9 +55,6 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "expo-notifications": "~0.32.16",
-    "expo-tracking-transparency": "^55.0.13",
-    "react-native-google-mobile-ads": "^16.3.3",
-    "react-native-iap": "^15.2.0"
+    "expo-notifications": "~0.32.16"
   }
 }
