@@ -13,7 +13,7 @@ import {
   type JolpicaResultRow,
   type SessionSlot,
 } from "../lib/jolpica.js";
-import { driverPhoto, fetchFPResults, fetchSprintQualiResults } from "../lib/openf1.js";
+import { driverPhoto, fetchFPResults, fetchQualifyingResultsOpenF1, fetchSprintQualiResults } from "../lib/openf1.js";
 
 const router = Router();
 
@@ -259,15 +259,22 @@ router.get("/gps/:id/sessions/:type", async (req, res, next) => {
       return;
     }
 
+    if (type === "qualifying") {
+      const openf1Results = await fetchQualifyingResultsOpenF1(race.Qualifying?.date);
+      if (openf1Results.length >= 3) {
+        res.json({ ...base, results: openf1Results });
+        return;
+      }
+      const rows = await fetchQualifyingResults(race.round);
+      res.json({ ...base, results: mapQualiResults(rows) });
+      return;
+    }
+
     let rows: JolpicaResultRow[] = [];
     if (type === "race") rows = await fetchRaceResults(race.round);
-    else if (type === "qualifying") rows = await fetchQualifyingResults(race.round);
     else if (type === "sprint") rows = await fetchSprintResults(race.round);
 
-    results =
-      type === "race" || type === "sprint"
-        ? mapRaceResults(rows)
-        : mapQualiResults(rows);
+    results = mapRaceResults(rows);
 
     res.json({ ...base, results });
   } catch (err) {
