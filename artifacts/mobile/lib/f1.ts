@@ -142,7 +142,7 @@ export type PodiumEntry = {
 };
 
 export type PodiumLatest = {
-  type: "race" | "qualifying";
+  type: "race" | "sprint";
   label: string;
   gpId: string;
   gpName: string;

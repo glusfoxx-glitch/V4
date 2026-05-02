@@ -415,15 +415,15 @@ router.get("/podium/latest", async (_req, res, next) => {
     const now = Date.now();
 
     type Candidate = {
-      type: "race" | "qualifying";
+      type: "race" | "sprint";
       race: JolpicaRace;
       ts: number;
     };
     const candidates: Candidate[] = [];
     for (const r of races) {
-      if (r.Qualifying) {
-        const ts = new Date(slotIso(r.Qualifying) ?? r.date).getTime();
-        if (ts <= now) candidates.push({ type: "qualifying", race: r, ts });
+      if (r.Sprint) {
+        const ts = new Date(slotIso(r.Sprint) ?? r.date).getTime();
+        if (ts <= now) candidates.push({ type: "sprint", race: r, ts });
       }
       const raceTs = new Date(
         slotIso({ date: r.date, time: r.time }) ?? r.date,
@@ -437,21 +437,22 @@ router.get("/podium/latest", async (_req, res, next) => {
     }
 
     candidates.sort((a, b) => b.ts - a.ts);
-    const latest = candidates[0];
-    const round = latest.race.round;
 
-    const rows =
-      latest.type === "race"
-        ? await fetchRaceResults(round)
-        : await fetchQualifyingResults(round);
+    for (const candidate of candidates) {
+      const round = candidate.race.round;
+      const rows =
+        candidate.type === "race"
+          ? await fetchRaceResults(round)
+          : await fetchSprintResults(round);
 
-    const top3 = rows.slice(0, 3);
-    const podium = await Promise.all(
-      top3.map(async (r) => {
-        const photo = await driverPhoto(r.Driver.code, r.number);
-        let time: string;
-        let gap: string;
-        if (latest.type === "race") {
+      if (rows.length < 3) continue;
+
+      const top3 = rows.slice(0, 3);
+      const podium = await Promise.all(
+        top3.map(async (r) => {
+          const photo = await driverPhoto(r.Driver.code, r.number);
+          let time: string;
+          let gap: string;
           if (parseInt(r.position, 10) === 1 && r.Time) {
             time = r.Time.time;
             gap = "—";
@@ -462,43 +463,35 @@ router.get("/podium/latest", async (_req, res, next) => {
             time = r.status ?? "—";
             gap = r.status ?? "—";
           }
-        } else {
-          const best = r.Q3 || r.Q2 || r.Q1 || "—";
-          time = best;
-          if (parseInt(r.position, 10) === 1) {
-            gap = "—";
-          } else {
-            const leaderBest = top3[0].Q3 || top3[0].Q2 || top3[0].Q1 || "";
-            const lt = parseLap(leaderBest);
-            const tt = parseLap(best);
-            gap = lt != null && tt != null ? `+${(tt - lt).toFixed(3)}` : "—";
-          }
-        }
-        return {
-          position: parseInt(r.position, 10),
-          driver: `${r.Driver.givenName} ${r.Driver.familyName}`,
-          driverCode:
-            r.Driver.code ?? r.Driver.familyName.slice(0, 3).toUpperCase(),
-          driverNumber: r.number ? parseInt(r.number, 10) : null,
-          team: r.Constructor.name,
-          time,
-          gap,
-          photo,
-        };
-      }),
-    );
+          return {
+            position: parseInt(r.position, 10),
+            driver: `${r.Driver.givenName} ${r.Driver.familyName}`,
+            driverCode:
+              r.Driver.code ?? r.Driver.familyName.slice(0, 3).toUpperCase(),
+            driverNumber: r.number ? parseInt(r.number, 10) : null,
+            team: r.Constructor.name,
+            time,
+            gap,
+            photo,
+          };
+        }),
+      );
 
-    res.json({
-      type: latest.type,
-      label: latest.type === "race" ? "Course" : "Qualifications",
-      gpId: latest.race.Circuit.circuitId,
-      gpName: latest.race.raceName,
-      country: latest.race.Circuit.Location.country,
-      countryCode: countryCode(latest.race.Circuit.Location.country),
-      date: latest.race.date,
-      key: `${latest.race.Circuit.circuitId}-${latest.type}`,
-      podium,
-    });
+      res.json({
+        type: candidate.type,
+        label: candidate.type === "race" ? "Course" : "Course Sprint",
+        gpId: candidate.race.Circuit.circuitId,
+        gpName: candidate.race.raceName,
+        country: candidate.race.Circuit.Location.country,
+        countryCode: countryCode(candidate.race.Circuit.Location.country),
+        date: candidate.race.date,
+        key: `${candidate.race.Circuit.circuitId}-${candidate.type}`,
+        podium,
+      });
+      return;
+    }
+
+    res.json(null);
   } catch (err) {
     next(err);
   }

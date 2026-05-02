@@ -19,6 +19,8 @@ export function PodiumGate() {
 
   useEffect(() => {
     if (!data || shown) return;
+    if (data.podium.length < 3) return;
+    if (data.type !== "race" && data.type !== "sprint") return;
     let cancelled = false;
     (async () => {
       const last = await getLastSeenPodium();

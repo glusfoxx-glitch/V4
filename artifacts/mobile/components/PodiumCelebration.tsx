@@ -74,7 +74,7 @@ export function PodiumCelebration({ data, visible, onClose }: Props) {
   }, [data.podium]);
 
   const winner = data.podium.find((p) => p.position === 1);
-  const isRace = data.type === "race";
+  const sessionLabel = data.type === "sprint" ? "COURSE SPRINT" : "COURSE";
 
   return (
     <Modal
@@ -109,9 +109,11 @@ export function PodiumCelebration({ data, visible, onClose }: Props) {
               contentFit="cover"
             />
             <View>
-              <Text style={styles.eyebrow}>
-                {isRace ? "PODIUM COURSE" : "PODIUM QUALIFS"}
-              </Text>
+              <View style={[styles.sessionTypePill, data.type === "sprint" ? styles.sessionTypeSprint : styles.sessionTypeRace]}>
+                <Text style={styles.eyebrow}>
+                  PODIUM {sessionLabel}
+                </Text>
+              </View>
               <Text style={styles.gpName} numberOfLines={1}>
                 {data.gpName}
               </Text>
@@ -145,7 +147,6 @@ export function PodiumCelebration({ data, visible, onClose }: Props) {
               key={entry.position}
               entry={entry}
               animationOrder={idx}
-              isRace={isRace}
             />
           ))}
         </View>
@@ -185,11 +186,9 @@ export function PodiumCelebration({ data, visible, onClose }: Props) {
 function PodiumStep({
   entry,
   animationOrder,
-  isRace,
 }: {
   entry: PodiumEntry;
   animationOrder: number;
-  isRace: boolean;
 }) {
   const height = POSITION_HEIGHTS[entry.position];
   const [c1, c2] = POSITION_COLORS[entry.position];
@@ -263,11 +262,8 @@ function PodiumStep({
           </Text>
         </View>
         <Text style={styles.timeText} numberOfLines={1}>
-          {entry.position === 1 || !isRace ? entry.time : entry.gap}
+          {entry.position === 1 ? entry.time : entry.gap}
         </Text>
-        {!isRace && entry.position > 1 ? (
-          <Text style={styles.gapSubText}>{entry.gap}</Text>
-        ) : null}
       </Animated.View>
 
       <Animated.View
@@ -451,11 +447,24 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   flag: { width: 38, height: 28, borderRadius: 4 },
+  sessionTypePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  sessionTypeRace: {
+    backgroundColor: "#E10600",
+  },
+  sessionTypeSprint: {
+    backgroundColor: "#7C3AED",
+  },
   eyebrow: {
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 1.5,
     fontFamily: "Inter_700Bold",
-    color: "#FACC15",
+    color: "#fff",
   },
   gpName: {
     fontSize: 16,

@@ -27,7 +27,11 @@ export default function SessionScreen() {
     queryKey: ["f1", "session", id, session],
     queryFn: () => fetchSession(id!, session!),
     enabled: !!id && !!session,
-    refetchInterval: 60_000,
+    refetchInterval: (query) => {
+      const d = query.state.data as import("@/lib/f1").SessionDetail | null | undefined;
+      if (d?.status === "completed" && (d?.results?.length ?? 0) === 0) return 15_000;
+      return 30_000;
+    },
     refetchOnWindowFocus: true,
   });
 

@@ -69,7 +69,7 @@ async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
   }
 }
 
-const ONE_MIN = 60 * 1000;
+const THIRTY_SEC = 30 * 1000;
 const FIVE_MIN = 5 * 60 * 1000;
 const ONE_HOUR = 60 * 60 * 1000;
 
@@ -88,21 +88,21 @@ export async function fetchRace(round: string): Promise<JolpicaRace | null> {
 export async function fetchRaceResults(round: string): Promise<JolpicaResultRow[]> {
   const json = await cachedFetch<{
     MRData: { RaceTable: { Races: { Results?: JolpicaResultRow[] }[] } };
-  }>(`${BASE}/current/${round}/results.json?limit=30`, ONE_MIN);
+  }>(`${BASE}/current/${round}/results.json?limit=30`, THIRTY_SEC);
   return json.MRData.RaceTable.Races[0]?.Results ?? [];
 }
 
 export async function fetchQualifyingResults(round: string): Promise<JolpicaResultRow[]> {
   const json = await cachedFetch<{
     MRData: { RaceTable: { Races: { QualifyingResults?: JolpicaResultRow[] }[] } };
-  }>(`${BASE}/current/${round}/qualifying.json?limit=30`, ONE_MIN);
+  }>(`${BASE}/current/${round}/qualifying.json?limit=30`, THIRTY_SEC);
   return json.MRData.RaceTable.Races[0]?.QualifyingResults ?? [];
 }
 
 export async function fetchSprintResults(round: string): Promise<JolpicaResultRow[]> {
   const json = await cachedFetch<{
     MRData: { RaceTable: { Races: { SprintResults?: JolpicaResultRow[] }[] } };
-  }>(`${BASE}/current/${round}/sprint.json?limit=30`, ONE_MIN);
+  }>(`${BASE}/current/${round}/sprint.json?limit=30`, THIRTY_SEC);
   return json.MRData.RaceTable.Races[0]?.SprintResults ?? [];
 }
 
